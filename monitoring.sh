@@ -5,13 +5,33 @@ if [ -f $1 ]; then
     export $(cat "$1" | grep -v '^#' | xargs)
 fi
 
+# notify() {
+#     local message=$1
+#     curl --socks5 localhost:2080 \
+#         --data-urlencode "text=$message" \
+#         "https://api.telegram.org/bot$TELEGRAM_BOT_TOKEN/sendMessage?chat_id=$ADMIN_ID"
+#     echo ""
+# }
+build_curl_command() {
+    local url=$1
+    shift
+    local data=$@
+    if [ -n "$SOCKS5_PROXY" ]; then
+        echo "curl --socks5 $SOCKS5_PROXY --data-urlencode \"$data\" \"$url\""
+    else
+        echo "curl --data-urlencode \"$data\" \"$url\""
+    fi
+}
+
 notify() {
     local message=$1
-    curl --socks5 localhost:2080 \
-        --data-urlencode "text=$message" \
-        "https://api.telegram.org/bot$TELEGRAM_BOT_TOKEN/sendMessage?chat_id=$ADMIN_ID"
+    local url="https://api.telegram.org/bot$TELEGRAM_BOT_TOKEN/sendMessage?chat_id=$ADMIN_ID"
+    local data="text=$message"
+    eval $(build_curl_command "$url" "$data")
     echo ""
 }
+
+
 
 check_disk_space() {
     disk_space=$(df -h / | awk 'NR==2{sub(/%/, "", $5); print $5}')
@@ -30,9 +50,15 @@ check_redis_connected_clients() {
 
     # Get connected clients info if Redis is installed
     connected_clients=$(redis-cli -a "$REDIS_PASSWORD" info clients | grep "^connected_clients:" | awk -F':' '{print $2}' | tr -d '\r')
-    echo "Redis connected clients: $connected_clients"
-    if [ "$connected_clients" -ge $REDIS_CONNECTION_THRESHOLD ]; then
-        notify "Redis has $connected_clients connected clients"
+    maxclients=$(redis-cli -a "$REDIS_PASSWORD" config get maxclients | awk 'NR==2')
+    echo "Redis connected clients: $connected_clients, max clients: $maxclients"
+    
+    threshold=$(echo "$maxclients * $REDIS_CONNECTION_THRESHOLD_PERCENTAGE" | bc)
+    threshold=${threshold%.*}
+    echo "Redis max clients: $maxclients, current connected clients: $connected_clients, threshold: $threshold"
+    
+    if [ "$connected_clients" -ge "$threshold" ]; then
+        notify "Redis connections have reached $REDIS_CONNECTION_THRESHOLD_PERCENTAGE of max $maxclients. Current connections: $connected_clients"
     fi
 }
 
@@ -50,14 +76,11 @@ check_postgres_connections() {
         echo "Could not get current connections from pg_stat_database"
         return
     fi
-    echo $max_connections
-    echo $PG_CONNECTION_THRESHOLD
-    threshold=$(echo "$max_connections * $PG_CONNECTION_THRESHOLD" | bc)
+    threshold=$(echo "$max_connections * $PG_CONNECTION_THRESHOLD_PERCENTAGE" | bc)
     threshold=${threshold%.*}
-    echo $threshold
     echo "PostgreSQL max connections: $max_connections, current connections: $current_connections, threshold: $threshold"
     if [ "$current_connections" -ge "$threshold" ]; then
-        notify "PostgreSQL connections have reached $PG_CONNECTION_THRESHOLD of max $max_connections. Current connections: $current_connections"
+        notify "PostgreSQL connections have reached $PG_CONNECTION_THRESHOLD_PERCENTAGE of max $max_connections. Current connections: $current_connections"
     fi
 
 }
