@@ -26,8 +26,8 @@ notify() {
 
 check_disk_space() {
     disk_space=$(df -h / | awk 'NR==2{sub(/%/, "", $5); print $5}')
-    echo "Disk space usage: $disk_space, DISK_SPACE_THRESHOLD=$DISK_SPACE_THRESHOLD"
-    if [ "$disk_space" -ge "$DISK_SPACE_THRESHOLD" ]; then
+    echo "Disk space usage: $disk_space, DISK_SPACE_THRESHOLD_PERCENTAGE=$DISK_SPACE_THRESHOLD_PERCENTAGE"
+    if [ "$disk_space" -ge "$DISK_SPACE_THRESHOLD_PERCENTAGE" ]; then
         notify "Disk space usage is $disk_space%"
     fi
 }
