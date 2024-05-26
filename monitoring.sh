@@ -2,7 +2,7 @@
 
 # Load variables from .env file
 if [ -f $1 ]; then
-    export $(cat $1 | grep -v '^#' | xargs)
+    export $(cat "$1" | grep -v '^#' | xargs)
 fi
 
 notify() {
@@ -23,26 +23,50 @@ check_disk_space() {
 
 check_redis_connected_clients() {
     # Check if redis-cli command exists
-    if
-        ! command -v redis-cli &
-        >/dev/null
-    then
-        echo "Redis is not installed."
+    if ! command -v redis-cli >/dev/null; then
+        notify "Redis is not installed."
         return
     fi
 
     # Get connected clients info if Redis is installed
-    connected_clients=$(redis-cli info clients | grep "^connected_clients:" | awk -F':' '{print $2}' | tr -d '\r')
+    connected_clients=$(redis-cli -a "$REDIS_PASSWORD" info clients | grep "^connected_clients:" | awk -F':' '{print $2}' | tr -d '\r')
     echo "Redis connected clients: $connected_clients"
-    if [ "$connected_clients" -ge 0 ]; then
+    if [ "$connected_clients" -ge $REDIS_CONNECTION_THRESHOLD ]; then
         notify "Redis has $connected_clients connected clients"
     fi
 }
 
-notify "monitoring started"
+check_postgres_connections() {
+    # Get max_connections from postgresql.conf
+    max_connections=$(grep -E "^\s*max_connections\s*=" /etc/postgresql/14/main/postgresql.conf | awk -F'=' '{print $2}' | awk '{print $1}')
+    if [ -z "$max_connections" ]; then
+        echo "Could not find max_connections in postgresql.conf"
+        return
+    fi
+    export PGPASSWORD=$PGPASSWORD
+    # Get the current number of connections from pg_stat_database
+    current_connections=$(psql -U $PGUSER -d $POSTGRES_DB -t -c "SELECT sum(numbackends) FROM pg_stat_database;" | tr -d '[:space:]')
+    if [ -z "$current_connections" ]; then
+        echo "Could not get current connections from pg_stat_database"
+        return
+    fi
+    echo $max_connections
+    echo $PG_CONNECTION_THRESHOLD
+    threshold=$(echo "$max_connections * $PG_CONNECTION_THRESHOLD" | bc)
+    threshold=${threshold%.*}
+    echo $threshold
+    echo "PostgreSQL max connections: $max_connections, current connections: $current_connections, threshold: $threshold"
+    if [ "$current_connections" -ge "$threshold" ]; then
+        notify "PostgreSQL connections have reached $PG_CONNECTION_THRESHOLD of max $max_connections. Current connections: $current_connections"
+    fi
+
+}
+
 
 while true; do
     check_disk_space
     check_redis_connected_clients
+    check_postgres_connections
+
     sleep $SLEEP_TIME
 done
