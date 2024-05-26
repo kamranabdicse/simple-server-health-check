@@ -1,17 +1,10 @@
 #!/bin/sh
 
 # Load variables from .env file
-if [ -f $1 ]; then
+if [ -f "$1" ]; then
     export $(cat "$1" | grep -v '^#' | xargs)
 fi
 
-# notify() {
-#     local message=$1
-#     curl --socks5 localhost:2080 \
-#         --data-urlencode "text=$message" \
-#         "https://api.telegram.org/bot$TELEGRAM_BOT_TOKEN/sendMessage?chat_id=$ADMIN_ID"
-#     echo ""
-# }
 build_curl_command() {
     local url=$1
     shift
@@ -31,12 +24,10 @@ notify() {
     echo ""
 }
 
-
-
 check_disk_space() {
     disk_space=$(df -h / | awk 'NR==2{sub(/%/, "", $5); print $5}')
     echo "Disk space usage: $disk_space, DISK_SPACE_THRESHOLD=$DISK_SPACE_THRESHOLD"
-    if [ "$disk_space" -ge $DISK_SPACE_THRESHOLD ]; then
+    if [ "$disk_space" -ge "$DISK_SPACE_THRESHOLD" ]; then
         notify "Disk space usage is $disk_space%"
     fi
 }
@@ -82,9 +73,7 @@ check_postgres_connections() {
     if [ "$current_connections" -ge "$threshold" ]; then
         notify "PostgreSQL connections have reached $PG_CONNECTION_THRESHOLD_PERCENTAGE of max $max_connections. Current connections: $current_connections"
     fi
-
 }
-
 
 while true; do
     check_disk_space
