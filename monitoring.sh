@@ -6,9 +6,9 @@ if [ -f "$1" ]; then
 fi
 
 build_curl_command() {
-    local url=$1
+    url=$1
     shift
-    local data=$@
+    data=$@
     if [ -n "$SOCKS5_PROXY" ]; then
         echo "curl --socks5 $SOCKS5_PROXY --data-urlencode \"$data\" \"$url\""
     else
@@ -17,16 +17,16 @@ build_curl_command() {
 }
 
 notify() {
-    local message=$1
-    local url="https://api.telegram.org/bot$TELEGRAM_BOT_TOKEN/sendMessage?chat_id=$ADMIN_ID"
-    local data="text=$message"
+    message=$1
+    url="https://api.telegram.org/bot$TELEGRAM_BOT_TOKEN/sendMessage?chat_id=$ADMIN_ID"
+    data="text=$message"
     eval $(build_curl_command "$url" "$data")
     echo ""
 }
 
 check_disk_space() {
     disk_space=$(df -h / | awk 'NR==2{sub(/%/, "", $5); print $5}')
-    echo "Disk space usage: $disk_space, DISK_SPACE_THRESHOLD_PERCENTAGE=$DISK_SPACE_THRESHOLD_PERCENTAGE"
+    echo "Disk space usage: $disk_space, DISK_SPACE_THRESHOLD_PERCENTAGE: $DISK_SPACE_THRESHOLD_PERCENTAGE"
     if [ "$disk_space" -ge "$DISK_SPACE_THRESHOLD_PERCENTAGE" ]; then
         notify "Disk space usage is $disk_space%"
     fi
