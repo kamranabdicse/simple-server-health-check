@@ -54,19 +54,41 @@ check_redis_connected_clients() {
 }
 
 check_postgres_connections() {
-    # Get max_connections from postgresql.conf
-    max_connections=$(grep -E "^\s*max_connections\s*=" /etc/postgresql/14/main/postgresql.conf | awk -F'=' '{print $2}' | awk '{print $1}')
-    if [ -z "$max_connections" ]; then
-        echo "Could not find max_connections in postgresql.conf"
+    # Check if psql command exists
+    if ! command -v psql >/dev/null; then
+        notify "PostgreSQL is not installed."
         return
     fi
+
+    # Determine PostgreSQL version
+    postgres_version=$(psql -V | awk '{print $3}' | awk -F'.' '{print $1}')
+    if [ -z "$postgres_version" ]; then
+        notify "Could not determine PostgreSQL version."
+        return
+    fi
+
+    # Get max_connections from postgresql.conf
+    postgres_conf_path="/etc/postgresql/$postgres_version/main/postgresql.conf"
+    if [ ! -f "$postgres_conf_path" ]; then
+        notify "PostgreSQL configuration file not found at $postgres_conf_path"
+        return
+    fi
+
+    max_connections=$(grep -E "^\s*max_connections\s*=" "$postgres_conf_path" | awk -F'=' '{print $2}' | awk '{print $1}')
+    if [ -z "$max_connections" ]; then
+        echo "Could not find max_connections in $postgres_conf_path"
+        return
+    fi
+
     export PGPASSWORD=$PGPASSWORD
+
     # Get the current number of connections from pg_stat_database
-    current_connections=$(psql -U $PGUSER -d $POSTGRES_DB -t -c "SELECT sum(numbackends) FROM pg_stat_database;" | tr -d '[:space:]')
+    current_connections=$(psql -U "$PGUSER" -d "$POSTGRES_DB" -t -c "SELECT sum(numbackends) FROM pg_stat_database;" | tr -d '[:space:]')
     if [ -z "$current_connections" ]; then
         echo "Could not get current connections from pg_stat_database"
         return
     fi
+
     threshold=$(echo "$max_connections * $PG_CONNECTION_THRESHOLD_PERCENTAGE" | bc)
     threshold=${threshold%.*}
     echo "PostgreSQL max connections: $max_connections, current connections: $current_connections, threshold: $threshold"
