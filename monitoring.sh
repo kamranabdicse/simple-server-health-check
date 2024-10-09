@@ -86,9 +86,43 @@ check_postgres_connections() {
     fi
 }
 
+
+check_docker_logs() {
+    if ! command -v docker >/dev/null; then
+        notify "Docker is not installed."
+        return
+    fi
+
+    container_id=$(docker ps -q -f "ancestor=$DOCKER_IMAGE_NAME")
+
+    if [ -z "$container_id" ]; then
+        notify "No container running for image: $DOCKER_IMAGE_NAME"
+        return
+    fi
+
+    last_log_line=$(docker logs --tail 1 "$container_id" | grep -Eo '[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2}')
+    
+    if [ -z "$last_log_line" ]; then
+        notify "No logs found for container: $container_id"
+        return
+    fi
+
+    last_log_timestamp=$(date -d "$last_log_line" +%s)
+    current_timestamp=$(date +%s)
+
+    time_diff=$(( (current_timestamp - last_log_timestamp) / 60 ))
+
+    echo "Last log timestamp: $last_log_line, Time difference: $time_diff hours"
+
+    if [ "$time_diff" -ge 5 ]; then
+        notify "Service has been inactive for over 5 mins. Last log at: $last_log_line"
+    fi
+}
+
 while true; do
     check_disk_space
     check_redis_connected_clients
     check_postgres_connections
+    check_docker_logs
     sleep $SLEEP_TIME
 done
