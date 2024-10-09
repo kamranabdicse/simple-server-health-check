@@ -113,8 +113,9 @@ check_docker_logs() {
     time_diff=$(( (current_timestamp - last_log_timestamp) / 60 ))
 
     echo "Last log timestamp: $last_log_line, Time difference: $time_diff hours"
+    threshold_minutes=${INACTIVITY_THRESHOLD_MINUTES:-120}
 
-    if [ "$time_diff" -ge 5 ]; then
+    if [ "$time_diff" ge "$threshold_minutes" ]; then
         notify "Service has been inactive for over 5 mins. Last log at: $last_log_line"
     fi
 }
