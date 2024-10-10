@@ -100,10 +100,11 @@ check_docker_logs() {
         return
     fi
 
-    last_log_line=$(docker logs --tail 1 "$container_id" | grep -Eo '[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2}')
-    
+    last_log_line=$(docker logs --tail 1 "$container_id" 2>&1 | grep -Eo '[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2},[0-9]{3}')
+    echo "Debug: last_log_line='$last_log_line'"
+
     if [ -z "$last_log_line" ]; then
-        notify "No logs found for container: $container_id"
+        notify "No logs found for container: $container_id for image: $DOCKER_IMAGE_NAME"
         return
     fi
 
@@ -112,13 +113,14 @@ check_docker_logs() {
 
     time_diff=$(( (current_timestamp - last_log_timestamp) / 60 ))
 
-    echo "Last log timestamp: $last_log_line, Time difference: $time_diff hours"
+    echo "Last log timestamp: $last_log_line, Time difference: $time_diff mins"
     threshold_minutes=${INACTIVITY_THRESHOLD_MINUTES:-120}
 
-    if [ "$time_diff" ge "$threshold_minutes" ]; then
-        notify "Service has been inactive for over 5 mins. Last log at: $last_log_line"
+    if [ "$time_diff" -ge "$threshold_minutes" ]; then
+        notify "Service has been inactive for over $threshold_minutes mins. Last log at: $last_log_line"
     fi
 }
+
 
 while true; do
     check_disk_space
